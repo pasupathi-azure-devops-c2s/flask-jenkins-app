@@ -2,87 +2,34 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: ubuntu-latest
 
-jobs:
-- job: InstallPython
-  displayName: 'Install Python'
-  steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.x'
-      addToPath: true
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.10'
+    addToPath: true
 
-- job: Build
-  displayName: 'Build stage'
-  dependsOn: InstallPython
-  steps:
-  - checkout: self
-  - script: |
-      sudo apt-get update
-      sudo apt-get install python3-venv 
-      python -m venv env
-      source env/bin/activate
-      pip install flask
-      pip install pymongo requests
-    displayName: 'Install dependencies'
+- script: |
+    python -m pip install --upgrade pip
+    pip install setuptools wheel
+    pip install pytest pymongo flask
+  displayName: 'Install dependencies'
 
-  - script: |
-      # Run the app.py code
-      pip install flask
-      pip install pymongo requests
-      python app.py &
-      sleep 5  # Wait for server to start
-    displayName: 'Run app.py code'
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+    replaceExistingArchive: true
 
-- job: Test
-  displayName: 'Test stage'
-  dependsOn: Build
-  steps:
-  - checkout: self
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.x'
-      addToPath: true
-
-  - script: |
-      source env/bin/activate
-      pip install flask
-      pip install pymongo
-      pip install pytest requests
-      python -m venv env
-      source env/bin/activate
-     
-      echo > __init__.py
-
-
-      pytest test/* --junitxml=test-results.xml
-
-    displayName: 'Run tests'
-
-  - task: PublishTestResults@2
-    displayName: 'Publish test results'
-    inputs:
-      testResultsFormat: 'JUnit'
-      testResultsFiles: '**/pytest-results.xml'
-
-
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publish Artifact with test results'
-    inputs:
-      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-      ArtifactName: 'sample-1'
-      publishLocation: 'Container'
-      MaxArtifactSize: 10
-
-- job: Deploy
-  displayName: 'Deploy'
-  dependsOn: Test
-  steps:
-  - task: AzureWebApp@1
-    inputs:
-      azureSubscription: 'aks-service-connection'
-      appType: 'webAppLinux'
-      appName: 'c2swebapp02'
-      package: '$(Pipeline.Workspace)/**/*.zip'
-      runtimeStack: 'PYTHON|3.10'
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: 'aks-service-connection'
+    appName: 'c2swebapp02'
+    deployToSlotOrASE: true
+    resourceGroupName: 'azure_devops_training'
+    slotName: 'production'
+    package: '$(Build.ArtifactStagingDirectory)/app.zip'
+    runtimeStack: 'PYTHON|3.10'
